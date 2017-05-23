@@ -1,0 +1,23 @@
+{
+  "name": "innoway-client",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/innoway.min.js",
+  "scripts": {
+    "prepublish": "webpack --debug; webpack -p; cp ./dist/innoway.min.js ../src/assets/js/"
+  },
+  "keywords": [
+    "example",
+    "typescript"
+  ],
+  "author": "Jerry Ip <diepmyduong@outlook.com.vn>",
+  "license": "ISC",
+  "devDependencies": {
+    "ts-loader": "^0.8.1",
+    "tslint": "^3.5.0",
+    "tslint-loader": "^2.1.0",
+    "typescript": "^1.8.2",
+    "webpack": "^1.12.14",
+    "yargs": "^4.2.0"
+  }
+}
