@@ -1,7 +1,10 @@
 import { ServerConfig ,APIPath} from './server.config'
 
 export const CustomerConfig = {
+    //KEYS
     authTokenStorage    : 'innoway.Customer.auth.token',
+    cardsStorage        : 'innoway.Customer.cards',
+    //API
     loginUrl            : APIPath+'CustomerLogin',
     signUpUrl           : APIPath+'Register',
     updateCustomerUrl     : APIPath+'EditCustomer',

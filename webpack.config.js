@@ -16,7 +16,7 @@ if (yargs.argv.p) {
 var config = {
   entry: [
     // __dirname + '/src/TestClass.ts',
-    __dirname + '/src/customer.ts'
+    __dirname + '/src/module.ts'
   ],
   devtool: 'source-map',
   output: {

@@ -1,25 +1,34 @@
-
 import { CustomerConfig } from './configs/customer.config';
 import { ServerConfig } from './configs/server.config';
 import { CustomerEvents } from './constants/customer.const';
-declare var $:any;
-
-
+import { FBConfig  } from './configs/fb.config';
+import { GoogleConfig } from './configs/google.config';
+declare var $:any,FB:any,gapi:any,window:any;
+FBConfig();
+GoogleConfig();
 export class Customer {
-
     //Events
+    public static events = CustomerEvents;
+    //User Info
     private _token:string;
     public user:any;
     public authenticated: boolean = false;
-    public static events = CustomerEvents;
+    //Bill Info
+    public static cards:any[] = [];
 
     constructor(token:string = null){
-        if(token == null){
-            token = localStorage.getItem(CustomerConfig.authTokenStorage);
+        //Check FB Login
+        //Check Google Login
+        
+        if(this instanceof Customer){
+            if(token == null){
+                token = localStorage.getItem(CustomerConfig.authTokenStorage);
+            }
+            if(token != null){
+                this.loginWithToken(token);
+            }
         }
-        if(token != null){
-            this.loginWithToken(token);
-        }
+        
     } 
     private requiedAuthenticate(callback:any = ()=>{}){
         if(!this.authenticated){
@@ -60,10 +69,8 @@ export class Customer {
             callback(err,status);
         });
     }
-
     //GET CUSTOMER
     public loginWithToken(token:string,callback:any = ()=>{}){
-        console.log('TOKEN',token);
         $.ajax({
             type: 'POST',
             url: CustomerConfig.getCustomerUrl,
@@ -73,7 +80,6 @@ export class Customer {
             }
         })
         .done((res:any) => {
-            console.log(res);
             if(res.StatusCode === 200){
                 this.user = res.Data;
                 this._token = res.Data.Token;
@@ -88,77 +94,184 @@ export class Customer {
             }
         })
         .fail((request:any,err:any,status:any)=>{
-            console.log('FAIL',request);
             this.authenticated = false;
             $(this).trigger(CustomerEvents.AuthStateChange,this.authenticated);
             callback(err,status);
         })
     }
-
     //LOGIN WITH GOOGLE
-    public loginWithGoolge(){
-
+    public loginWithGoolge(callback:any=()=>{}){
+        var auth2 = gapi.auth2.getAuthInstance();
+        // Sign-In
+        auth2.signIn()
+        .then((profile:any)=>{
+            var idToken = profile.getAuthResponse().id_token;
+            callback(null,idToken);
+        },(error:any)=>{
+            callback('Authentication failed.',error);
+        });
     }
-
     //LOGIN WITH FACEBOOK
-    public loginWithFacebook(){
-        
+    public loginWithFacebook(callback:any = ()=>{}){
+        FB.login(function(response:any) {
+            if (response.authResponse) {
+                callback(null,FB.getAccessToken());
+            } else {
+                callback('User cancelled login or did not fully authorize.',null);
+            }
+        });
     }
-
+    //LOGOUT
+    public logout(){
+        FB.logout();
+        // Get `GoogleAuth` instance
+        var auth2 = gapi.auth2.getAuthInstance();
+        auth2.signOut();
+        localStorage.removeItem(CustomerConfig.authTokenStorage);
+        this._token = null;
+        this.user = null;
+        this.authenticated = false;
+    }
     //SIGNUP
     public signUp(data:any,callback:any = ()=>{}){
-        $.ajax({
-            type: 'POST',
+
+        var form = new FormData();
+        form.append("Phone", data.phone);
+        form.append("Password", data.password);
+        form.append("Fullname", data.fullName);
+        form.append("Email", data.email);
+        form.append("FacebookToken", "");
+        form.append("GoogleToken", "");
+
+        var settings = {
+            async: true,
+            crossDomain: true,
             url: CustomerConfig.signUpUrl,
-            dataType: 'json',
-            data: data
-        })
-        .done((res:any) => {
-            if(res.StatusCode === 200){
-                this.user = res.Data;
-                this._token = res.Data.Token;
-                this.authenticated = true;
-                $(this).trigger(CustomerEvents.AuthStateChange,this.authenticated);
-                localStorage.setItem(CustomerConfig.authTokenStorage,res.Data.Token);
-                callback(null,res.Data);
-            }else{
+            method: "POST",
+            processData: false,
+            contentType: false,
+            mimeType: "multipart/form-data",
+            data: form,
+            success: (result:any,status:any,res:any)=>{
+                var resJson = JSON.parse(res.responseText);
+                if(resJson.StatusCode === 200){
+                    this.user = resJson.Data;
+                    this._token = resJson.Data.Token;
+                    this.authenticated = true;
+                    $(this).trigger(CustomerEvents.AuthStateChange,this.authenticated);
+                    localStorage.setItem(CustomerConfig.authTokenStorage,resJson.Data.Token);
+                    callback(null,resJson.Data);
+                }else{
+                    this.authenticated = false;
+                    $(this).trigger(CustomerEvents.AuthStateChange,this.authenticated);
+                    callback(resJson.StatusCode,resJson.StatusMessage);
+                }
+            },
+            error: (res:any,status:any,err:any)=>{
+                var resJson = JSON.parse(res.responseText);
                 this.authenticated = false;
                 $(this).trigger(CustomerEvents.AuthStateChange,this.authenticated);
-                callback(res.StatusCode,res.StatusMessage);
+                callback(resJson.StatusCode,resJson.StatusMessage);
             }
-        })
-        .fail((request:any,err:any,status:any)=>{
-            this.authenticated = false;
-            $(this).trigger(CustomerEvents.AuthStateChange,this.authenticated);
-            callback(err,status);
-        });
+        }
+        $.ajax(settings);
     }
-
     //Update Customer
-    public update(token:string,data:any,callback:any = ()=>{}){
-        $.ajax({
-            type: 'POST',
-            url: CustomerConfig.updateCustomerUrl,
-            dataType: 'json',
-            data: data,
-            headers: {
-                'token': token
-            }
-        })
-        .done((res:any) => {
-            if(res.StatusCode === 200){
-                $(this).trigger(CustomerEvents.CustomerEdited,res.Data);
-                this.user = res.Data;
-                callback(null,res.Data);
-            }else{
-                callback(res.StatusCode,res.StatusMessage);
-            }
-        })
-        .fail((request:any,err:any,status:any)=>{
-            callback(err,status);
-        });
+    public update(data:any,callback:any = ()=>{}){
+        if(this.requiedAuthenticate(callback)){
+            $.ajax({
+                type: 'POST',
+                url: CustomerConfig.updateCustomerUrl,
+                dataType: 'json',
+                data: data,
+                headers: {
+                    'token': this._token
+                }
+            })
+            .done((res:any) => {
+                if(res.StatusCode === 200){
+                    $(this).trigger(CustomerEvents.CustomerEdited,res.Data);
+                    this.user = res.Data;
+                    callback(null,res.Data);
+                }else{
+                    callback(res.StatusCode,res.StatusMessage);
+                }
+            })
+            .fail((request:any,err:any,status:any)=>{
+                callback(err,status);
+            });
+        }
     }
     //====== BILLS
+    //== CARDS
+    //GET CARDS
+    public static getCards(){
+        this.cards = JSON.parse(localStorage.getItem(CustomerConfig.cardsStorage));
+        if(!this.cards){
+            this.cards = [];
+        }
+        $(this).trigger(CustomerEvents.CardsChange,{ data: this.cards });
+        return this.cards;
+    }
+    public static saveCards(){
+        localStorage.setItem(CustomerConfig.cardsStorage,JSON.stringify(this.cards));
+    }
+    //Add to Cards
+    public static addToCard(product:any){
+        var existedIndex = 0;
+        var existed = this.cards.filter((pr:any,index:number)=>{
+            if(pr.Id == product.Id){
+                existedIndex = index;
+                return true;
+            }
+            return false;
+        })
+        if(existed.length > 0){
+            this.cards[existedIndex].Quantity++;
+        }else{
+            product.Quantity = 1;
+            this.cards.push(product);
+        }
+        this.saveCards();
+        $(this).trigger(CustomerEvents.CardsChange,{ data: this.cards });
+    }
+    //Remove form Cards
+    public static removeCard(product:any){
+        var existedIndex = 0;
+        var existed = this.cards.filter((pr:any,index:number)=>{
+            if(pr.Id == product.Id){
+                existedIndex = index;
+                return true;
+            }
+            return false;
+        })
+        if(existed.length > 0){
+            this.cards.splice(existedIndex,1);
+            this.saveCards();
+            $(this).trigger(CustomerEvents.CardsChange,{ data: this.cards });
+        }
+    }
+
+    //Decrease Card Quantity
+    public static decreaseCard(product:any){
+        var existedIndex = 0;
+        var existed = this.cards.filter((pr:any,index:number)=>{
+            if(pr.Id == product.Id){
+                existedIndex = index;
+                return true;
+            }
+            return false;
+        })
+        if(existed.length > 0){
+            if(this.cards[existedIndex].Quantity == 1){
+                this.cards.splice(existedIndex,1);
+            }else{
+                this.cards[existedIndex].Quantity--;
+            }
+            this.saveCards();
+            $(this).trigger(CustomerEvents.CardsChange,{ data: this.cards });
+        }
+    }
     //GET LIST BILLS
     public getBills(callback:any = ()=>{}){
         if(this.requiedAuthenticate(callback)){
@@ -205,9 +318,7 @@ export class Customer {
         .fail((request:any,err:any,status:any)=>{
             callback(err,status);
         });
-    }
+    }  
 
-    
-
-    
 }
+
