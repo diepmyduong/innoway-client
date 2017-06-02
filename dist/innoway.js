@@ -173,15 +173,16 @@ return /******/ (function(modules) { // webpackBootstrap
 	        });
 	    };
 	    //LOGIN WITH GOOGLE
-	    Customer.prototype.loginWithGoolge = function (callback) {
+	    Customer.prototype.loginWithGoogle = function (callback) {
 	        if (callback === void 0) { callback = function () { }; }
+	        var self = this;
 	        var auth2 = gapi.auth2.getAuthInstance();
 	        // Sign-In
 	        auth2.signIn()
 	            .then(function (profile) {
-	            console.log(profile.getAuthResponse());
-	            var idToken = profile.getAuthResponse().id_token;
-	            callback(null, idToken);
+	            // var idToken = profile.getAuthResponse().id_token;
+	            // callback(null,profile.getId());
+	            self.getUserWithProvider('google', profile.getId(), callback);
 	        }, function (error) {
 	            callback('Authentication failed.', error);
 	        });
@@ -189,14 +190,57 @@ return /******/ (function(modules) { // webpackBootstrap
 	    //LOGIN WITH FACEBOOK
 	    Customer.prototype.loginWithFacebook = function (callback) {
 	        if (callback === void 0) { callback = function () { }; }
+	        var self = this;
 	        FB.login(function (response) {
 	            if (response.authResponse) {
-	                callback(null, FB.getAccessToken());
+	                // callback(null,FB.getAccessToken());
+	                // callback(null,FB.getUserID());
+	                self.getUserWithProvider('facebook', FB.getUserID(), callback);
 	            }
 	            else {
 	                callback('User cancelled login or did not fully authorize.', null);
 	            }
 	        });
+	    };
+	    Customer.prototype.getUserWithProvider = function (provider, token, callback) {
+	        var _this = this;
+	        if (callback === void 0) { callback = function () { }; }
+	        var form = new FormData();
+	        form.append("Method", provider);
+	        form.append("Token", token);
+	        var settings = {
+	            "async": true,
+	            "crossDomain": true,
+	            "url": customer_config_1.CustomerConfig.loginUrl,
+	            "method": "POST",
+	            "processData": false,
+	            "contentType": false,
+	            "mimeType": "multipart/form-data",
+	            "data": form,
+	            success: function (result, status, res) {
+	                var resJson = JSON.parse(res.responseText);
+	                if (resJson.StatusCode === 200) {
+	                    _this.user = resJson.Data;
+	                    _this._token = resJson.Data.Token;
+	                    _this.authenticated = true;
+	                    $(_this).trigger(customer_const_1.CustomerEvents.AuthStateChange, _this.authenticated);
+	                    localStorage.setItem(customer_config_1.CustomerConfig.authTokenStorage, resJson.Data.Token);
+	                    callback(null, resJson.Data);
+	                }
+	                else {
+	                    _this.authenticated = false;
+	                    $(_this).trigger(customer_const_1.CustomerEvents.AuthStateChange, _this.authenticated);
+	                    callback('User not signup', token);
+	                }
+	            },
+	            error: function (res, status, err) {
+	                var resJson = JSON.parse(res.responseText);
+	                _this.authenticated = false;
+	                $(_this).trigger(customer_const_1.CustomerEvents.AuthStateChange, _this.authenticated);
+	                callback('User not signup', token);
+	            }
+	        };
+	        $.ajax(settings);
 	    };
 	    //LOGOUT
 	    Customer.prototype.logout = function () {
@@ -220,6 +264,58 @@ return /******/ (function(modules) { // webpackBootstrap
 	        form.append("Email", data.email);
 	        form.append("FacebookToken", "");
 	        form.append("GoogleToken", "");
+	        var settings = {
+	            async: true,
+	            crossDomain: true,
+	            url: customer_config_1.CustomerConfig.signUpUrl,
+	            method: "POST",
+	            processData: false,
+	            contentType: false,
+	            mimeType: "multipart/form-data",
+	            data: form,
+	            success: function (result, status, res) {
+	                var resJson = JSON.parse(res.responseText);
+	                if (resJson.StatusCode === 200) {
+	                    _this.user = resJson.Data;
+	                    _this._token = resJson.Data.Token;
+	                    _this.authenticated = true;
+	                    $(_this).trigger(customer_const_1.CustomerEvents.AuthStateChange, _this.authenticated);
+	                    localStorage.setItem(customer_config_1.CustomerConfig.authTokenStorage, resJson.Data.Token);
+	                    callback(null, resJson.Data);
+	                }
+	                else {
+	                    _this.authenticated = false;
+	                    $(_this).trigger(customer_const_1.CustomerEvents.AuthStateChange, _this.authenticated);
+	                    callback(resJson.StatusCode, resJson.StatusMessage);
+	                }
+	            },
+	            error: function (res, status, err) {
+	                var resJson = JSON.parse(res.responseText);
+	                _this.authenticated = false;
+	                $(_this).trigger(customer_const_1.CustomerEvents.AuthStateChange, _this.authenticated);
+	                callback(resJson.StatusCode, resJson.StatusMessage);
+	            }
+	        };
+	        $.ajax(settings);
+	    };
+	    Customer.prototype.signUpWithProvider = function (provider, token, data, callback) {
+	        var _this = this;
+	        if (callback === void 0) { callback = function () { }; }
+	        var form = new FormData();
+	        form.append("Phone", data.phone);
+	        form.append("Password", "");
+	        form.append("Fullname", data.fullName);
+	        form.append("Email", data.email);
+	        switch (provider) {
+	            case 'facebook':
+	                form.append("FacebookToken", token);
+	                form.append("GoogleToken", "");
+	                break;
+	            case 'google':
+	                form.append("FacebookToken", "");
+	                form.append("GoogleToken", token);
+	                break;
+	        }
 	        var settings = {
 	            async: true,
 	            crossDomain: true,
@@ -333,6 +429,11 @@ return /******/ (function(modules) { // webpackBootstrap
 	            $(this).trigger(customer_const_1.CustomerEvents.CardsChange, { data: this.cards });
 	        }
 	    };
+	    Customer.clearCard = function () {
+	        this.cards = [];
+	        this.saveCards();
+	        $(this).trigger(customer_const_1.CustomerEvents.CardsChange, { data: this.cards });
+	    };
 	    //Decrease Card Quantity
 	    Customer.decreaseCard = function (product) {
 	        var existedIndex = 0;
@@ -368,6 +469,27 @@ return /******/ (function(modules) { // webpackBootstrap
 	            })
 	                .done(function (res) {
 	                if (res.StatusCode === 200) {
+	                    res.Data.forEach(function (bill) {
+	                        switch (bill.Status) {
+	                            case "-1":
+	                                bill.Status = Customer.billStatus.DELETED;
+	                                break;
+	                            case "0":
+	                                bill.Status = Customer.billStatus.DELIVERING;
+	                                break;
+	                            case "1":
+	                                bill.Status = Customer.billStatus.WAITING;
+	                                break;
+	                            case "2":
+	                                bill.Status = Customer.billStatus.NOT_DELIVERING;
+	                                break;
+	                            case "4":
+	                                bill.Status = Customer.billStatus.PAYED;
+	                                break;
+	                            default:
+	                                bill.Status = Customer.billStatus.UNKNOW;
+	                        }
+	                    });
 	                    callback(null, res.Data);
 	                }
 	                else {
@@ -378,6 +500,139 @@ return /******/ (function(modules) { // webpackBootstrap
 	                callback(err, status);
 	            });
 	        }
+	    };
+	    //GET BILL DETAIL
+	    Customer.prototype.getBillDetail = function (billId, callback) {
+	        if (!this.requiedAuthenticate(callback))
+	            return;
+	        var form = new FormData();
+	        form.append("BillId", billId);
+	        var settings = {
+	            "async": true,
+	            "crossDomain": true,
+	            "url": customer_config_1.CustomerConfig.getBillUrl,
+	            "method": "POST",
+	            "headers": {
+	                "Token": this._token
+	            },
+	            "processData": false,
+	            "contentType": false,
+	            "mimeType": "multipart/form-data",
+	            "data": form,
+	            success: function (result, status, res) {
+	                var resJson = JSON.parse(res.responseText);
+	                if (resJson.StatusCode === 200) {
+	                    //Set status
+	                    switch (resJson.Data.Status) {
+	                        case "-1":
+	                            resJson.Data.Status = Customer.billStatus.DELETED;
+	                            break;
+	                        case "0":
+	                            resJson.Data.Status = Customer.billStatus.DELIVERING;
+	                            break;
+	                        case "1":
+	                            resJson.Data.Status = Customer.billStatus.WAITING;
+	                            break;
+	                        case "2":
+	                            resJson.Data.Status = Customer.billStatus.NOT_DELIVERING;
+	                            break;
+	                        case "4":
+	                            resJson.Data.Status = Customer.billStatus.PAYED;
+	                            break;
+	                        default:
+	                            resJson.Data.Status = Customer.billStatus.UNKNOW;
+	                    }
+	                    if (resJson.Data.PromotionId) {
+	                        resJson.Data.Promotion = "Có";
+	                    }
+	                    else {
+	                        resJson.Data.Promotion = "Không Có";
+	                    }
+	                    //Set thumbnail
+	                    resJson.Data.BillDetails.forEach(function (product) {
+	                        product.ProductThumb = server_config_1.ServerConfig.host + server_config_1.ServerConfig.filesPath + product.ProductThumb;
+	                    });
+	                    callback(null, resJson.Data);
+	                }
+	                else {
+	                    callback(resJson.StatusCode, resJson.StatusMessage);
+	                }
+	            },
+	            error: function (res, status, err) {
+	                var resJson = JSON.parse(res.responseText);
+	                callback(resJson.StatusCode, resJson.StatusMessage);
+	            }
+	        };
+	        $.ajax(settings);
+	    };
+	    Customer.prototype.sendBill = function (bill, callback) {
+	        if (callback === void 0) { callback = function () { }; }
+	        if (!this.requiedAuthenticate(callback))
+	            return;
+	        var form = new FormData();
+	        form.append("Latitude", bill.latitude);
+	        form.append("Longitude", bill.longitude);
+	        form.append("BillDetails", JSON.stringify(bill.details));
+	        form.append("PromotionCode", bill.promotionCode);
+	        form.append("Address", bill.address);
+	        form.append("Area", bill.area);
+	        console.log(this._token);
+	        var settings = {
+	            "async": true,
+	            "crossDomain": true,
+	            "url": customer_config_1.CustomerConfig.sendBillUrl,
+	            "method": "POST",
+	            "headers": {
+	                "token": this._token
+	            },
+	            "processData": false,
+	            "contentType": false,
+	            "mimeType": "multipart/form-data",
+	            "data": form,
+	            success: function (result, status, res) {
+	                var resJson = JSON.parse(res.responseText);
+	                if (resJson.StatusCode === 200) {
+	                    callback(null, resJson.Data);
+	                }
+	                else {
+	                    callback(resJson.StatusCode, resJson.StatusMessage);
+	                }
+	            },
+	            error: function (res, status, err) {
+	                var resJson = JSON.parse(res.responseText);
+	                callback(resJson.StatusCode, resJson.StatusMessage);
+	            }
+	        };
+	        $.ajax(settings);
+	    };
+	    //PROMOTIONS
+	    //GET PROMOTIONS
+	    Customer.prototype.getPromotions = function (callback) {
+	        if (!this.requiedAuthenticate(callback))
+	            return;
+	        var settings = {
+	            "async": true,
+	            "crossDomain": true,
+	            "url": customer_config_1.CustomerConfig.getPromotionsUrl,
+	            "method": "GET",
+	            "headers": {
+	                "token": this._token
+	            }
+	        };
+	        $.ajax(settings).done(function (res) {
+	            if (res.StatusCode === 200) {
+	                res.Data.forEach(function (promotion) {
+	                    promotion.Photo = server_config_1.ServerConfig.host + server_config_1.ServerConfig.filesPath + promotion.Photo;
+	                });
+	                callback(null, res.Data);
+	            }
+	            else {
+	                callback(res.StatusCode, res.StatusMessage);
+	            }
+	        })
+	            .fail(function (request, err, status) {
+	            callback(err, status);
+	        });
 	    };
 	    //=========== STATIC METHODS ==================
 	    //====== PRODUCTS
@@ -404,8 +659,22 @@ return /******/ (function(modules) { // webpackBootstrap
 	            callback(err, status);
 	        });
 	    };
+	    Customer.getAllBlogs = function (callback) {
+	        var settings = {
+	            "async": true,
+	            "crossDomain": true,
+	            "url": customer_config_1.CustomerConfig.getBlogsUrl,
+	            "method": "GET"
+	        };
+	        $.ajax(settings).done(function (response) {
+	            callback(null, response);
+	        }).fail(function (request, err, status) {
+	            callback(err, status);
+	        });
+	    };
 	    //Events
 	    Customer.events = customer_const_1.CustomerEvents;
+	    Customer.billStatus = customer_const_1.BillStatus;
 	    //Bill Info
 	    Customer.cards = [];
 	    return Customer;
@@ -448,7 +717,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	    filesPath: '/uploads/',
 	    apiPath: '/apis/v1/',
 	    FBAPI: '893757327425340',
-	    GoogleAPI: '235416124042-2papc83kbjf14g3m9on0cal3bmihdqm9.apps.googleusercontent.com'
+	    GoogleAPI: '235416124042-2papc83kbjf14g3m9on0cal3bmihdqm9.apps.googleusercontent.com' //Local
 	};
 	exports.APIPath = exports.ServerConfig.host + exports.ServerConfig.apiPath;
 
@@ -463,6 +732,14 @@ return /******/ (function(modules) { // webpackBootstrap
 	    CustomerEdited: 'CustomerEdited',
 	    //CARD EVENT
 	    CardsChange: 'CardsChange',
+	};
+	exports.BillStatus = {
+	    NOT_DELIVERING: "Đang điều phối",
+	    WAITING: "Đã điều phối",
+	    DELIVERING: "Đang giao",
+	    PAYED: "Đã thanh toán",
+	    DELETED: "Đã huỷ",
+	    UNKNOW: "Không xác định"
 	};
 
 

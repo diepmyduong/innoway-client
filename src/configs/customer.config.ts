@@ -7,7 +7,7 @@ export const CustomerConfig = {
     //API
     loginUrl            : APIPath+'CustomerLogin',
     signUpUrl           : APIPath+'Register',
-    updateCustomerUrl     : APIPath+'EditCustomer',
+    updateCustomerUrl   : APIPath+'EditCustomer',
     getBillsUrl         : APIPath+'GetListBillFromCustomer',
     getBillUrl          : APIPath+'GetBill',
     getAllProductsUrl   : APIPath+'GetAllProduct',
