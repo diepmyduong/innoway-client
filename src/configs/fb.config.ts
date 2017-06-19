@@ -5,6 +5,13 @@ declare var $:any,window:any,FB:any;
 
 
 export const FBConfig= () => {
+    (function(d:any, s:any, id:any){
+        var js:any, fjs = d.getElementsByTagName(s)[0];
+        if (d.getElementById(id)) {return;}
+        js = d.createElement(s); js.id = id;
+        js.src = "//connect.facebook.com/en_US/messenger.Extensions.js";
+        fjs.parentNode.insertBefore(js, fjs);
+    }(document, 'script', 'Messenger'));
     var d = document;
     var s = 'script';
     var id = 'facebook-jssdk';

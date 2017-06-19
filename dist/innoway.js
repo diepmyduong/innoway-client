@@ -106,17 +106,22 @@ return /******/ (function(modules) { // webpackBootstrap
 	    };
 	    //====== Auth
 	    //LOGIN
-	    Customer.prototype.login = function (phone, password, callback) {
+	    Customer.prototype.login = function (phone, password, callback, facebookSenderId) {
 	        var _this = this;
 	        if (callback === void 0) { callback = function () { }; }
+	        if (facebookSenderId === void 0) { facebookSenderId = ""; }
+	        var data = {
+	            Phone: phone,
+	            Password: password,
+	        };
+	        if (facebookSenderId) {
+	            data.FacebookSenderId = facebookSenderId;
+	        }
 	        $.ajax({
 	            type: 'POST',
 	            url: customer_config_1.CustomerConfig.loginUrl,
 	            dataType: 'json',
-	            data: {
-	                Phone: phone,
-	                Password: password
-	            }
+	            data: data
 	        })
 	            .done(function (res) {
 	            if (res.StatusCode === 200) {
@@ -172,9 +177,17 @@ return /******/ (function(modules) { // webpackBootstrap
 	            callback(err, status);
 	        });
 	    };
+	    Object.defineProperty(Customer.prototype, "googleProfile", {
+	        get: function () {
+	            return this._googleProfile;
+	        },
+	        enumerable: true,
+	        configurable: true
+	    });
 	    //LOGIN WITH GOOGLE
-	    Customer.prototype.loginWithGoogle = function (callback) {
+	    Customer.prototype.loginWithGoogle = function (callback, facebookSenderId) {
 	        if (callback === void 0) { callback = function () { }; }
+	        if (facebookSenderId === void 0) { facebookSenderId = ""; }
 	        var self = this;
 	        var auth2 = gapi.auth2.getAuthInstance();
 	        // Sign-In
@@ -182,32 +195,51 @@ return /******/ (function(modules) { // webpackBootstrap
 	            .then(function (profile) {
 	            // var idToken = profile.getAuthResponse().id_token;
 	            // callback(null,profile.getId());
-	            self.getUserWithProvider('google', profile.getId(), callback);
+	            self._googleProfile = profile.getBasicProfile();
+	            self.getUserWithProvider('google', profile.getId(), callback, facebookSenderId);
 	        }, function (error) {
 	            callback('Authentication failed.', error);
 	        });
 	    };
+	    Object.defineProperty(Customer.prototype, "facebookProfile", {
+	        get: function () {
+	            return this._fbProfile;
+	        },
+	        enumerable: true,
+	        configurable: true
+	    });
 	    //LOGIN WITH FACEBOOK
-	    Customer.prototype.loginWithFacebook = function (callback) {
+	    Customer.prototype.loginWithFacebook = function (callback, facebookSenderId) {
 	        if (callback === void 0) { callback = function () { }; }
+	        if (facebookSenderId === void 0) { facebookSenderId = ""; }
 	        var self = this;
 	        FB.login(function (response) {
 	            if (response.authResponse) {
 	                // callback(null,FB.getAccessToken());
 	                // callback(null,FB.getUserID());
-	                self.getUserWithProvider('facebook', FB.getUserID(), callback);
+	                FB.api('/me', 'GET', { "fields": "id,name,email,birthday" }, function (response) {
+	                    self._fbProfile = response;
+	                });
+	                self.getUserWithProvider('facebook', FB.getAccessToken(), callback, facebookSenderId);
 	            }
 	            else {
 	                callback('User cancelled login or did not fully authorize.', null);
 	            }
+	        }, {
+	            scope: 'email,user_birthday',
+	            return_scopes: true
 	        });
 	    };
-	    Customer.prototype.getUserWithProvider = function (provider, token, callback) {
+	    Customer.prototype.getUserWithProvider = function (provider, token, callback, facebookSenderId) {
 	        var _this = this;
 	        if (callback === void 0) { callback = function () { }; }
+	        if (facebookSenderId === void 0) { facebookSenderId = ""; }
 	        var form = new FormData();
 	        form.append("Method", provider);
 	        form.append("Token", token);
+	        if (facebookSenderId) {
+	            form.append("FacebookSenderId", facebookSenderId);
+	        }
 	        var settings = {
 	            "async": true,
 	            "crossDomain": true,
@@ -262,8 +294,11 @@ return /******/ (function(modules) { // webpackBootstrap
 	        form.append("Password", data.password);
 	        form.append("Fullname", data.fullName);
 	        form.append("Email", data.email);
-	        form.append("FacebookToken", "");
-	        form.append("GoogleToken", "");
+	        form.append("FacebookId", "");
+	        form.append("GoogleId", "");
+	        if (data.facebookSenderId) {
+	            form.append("FacebookSenderId", (data.facebookSenderId));
+	        }
 	        var settings = {
 	            async: true,
 	            crossDomain: true,
@@ -274,6 +309,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	            mimeType: "multipart/form-data",
 	            data: form,
 	            success: function (result, status, res) {
+	                console.error(res);
 	                var resJson = JSON.parse(res.responseText);
 	                if (resJson.StatusCode === 200) {
 	                    _this.user = resJson.Data;
@@ -298,7 +334,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	        };
 	        $.ajax(settings);
 	    };
-	    Customer.prototype.signUpWithProvider = function (provider, token, data, callback) {
+	    Customer.prototype.signUpWithProvider = function (provider, uid, data, callback) {
 	        var _this = this;
 	        if (callback === void 0) { callback = function () { }; }
 	        var form = new FormData();
@@ -306,14 +342,17 @@ return /******/ (function(modules) { // webpackBootstrap
 	        form.append("Password", "");
 	        form.append("Fullname", data.fullName);
 	        form.append("Email", data.email);
+	        if (data.facebookSenderId) {
+	            form.append("FacebookSenderId", (data.facebookSenderId));
+	        }
 	        switch (provider) {
 	            case 'facebook':
-	                form.append("FacebookToken", token);
-	                form.append("GoogleToken", "");
+	                form.append("FacebookId", FB.getUserID());
+	                form.append("GoogleId", "");
 	                break;
 	            case 'google':
-	                form.append("FacebookToken", "");
-	                form.append("GoogleToken", token);
+	                form.append("FacebookId", "");
+	                form.append("GoogleId", uid);
 	                break;
 	        }
 	        var settings = {
@@ -576,6 +615,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	        form.append("PromotionCode", bill.promotionCode);
 	        form.append("Address", bill.address);
 	        form.append("Area", bill.area);
+	        // form.append("SenderId",bill.senderId || "");
+	        form.append("BranchId", bill.branchId || 1);
 	        console.log(this._token);
 	        var settings = {
 	            "async": true,
@@ -713,10 +754,11 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	"use strict";
 	exports.ServerConfig = {
-	    host: 'http://phincafe.vn',
+	    host: 'https://innoway-server.mitek.vn',
 	    filesPath: '/uploads/',
 	    apiPath: '/apis/v1/',
 	    FBAPI: '893757327425340',
+	    // FBAPI: '276104969472219',
 	    GoogleAPI: '235416124042-2papc83kbjf14g3m9on0cal3bmihdqm9.apps.googleusercontent.com' //Local
 	};
 	exports.APIPath = exports.ServerConfig.host + exports.ServerConfig.apiPath;
@@ -751,6 +793,16 @@ return /******/ (function(modules) { // webpackBootstrap
 	var server_config_1 = __webpack_require__(4);
 	//Facebook Config
 	exports.FBConfig = function () {
+	    (function (d, s, id) {
+	        var js, fjs = d.getElementsByTagName(s)[0];
+	        if (d.getElementById(id)) {
+	            return;
+	        }
+	        js = d.createElement(s);
+	        js.id = id;
+	        js.src = "//connect.facebook.com/en_US/messenger.Extensions.js";
+	        fjs.parentNode.insertBefore(js, fjs);
+	    }(document, 'script', 'Messenger'));
 	    var d = document;
 	    var s = 'script';
 	    var id = 'facebook-jssdk';

@@ -14,6 +14,8 @@ export class Customer {
     private _token:string;
     public user:any;
     public authenticated: boolean = false;
+    private _fbProfile: any;
+    private _googleProfile: any;
     //Bill Info
     public static cards:any[] = [];
 
@@ -39,15 +41,19 @@ export class Customer {
     }
     //====== Auth
     //LOGIN
-    public login(phone:string,password:string,callback:any = ()=>{}){
+    public login(phone:string,password:string,callback:any = ()=>{},facebookSenderId:string = ""){
+        var data:any = {
+            Phone   : phone,
+            Password: password,
+        };
+        if(facebookSenderId){
+            data.FacebookSenderId = facebookSenderId;
+        }
         $.ajax({
             type: 'POST',
             url: CustomerConfig.loginUrl,
             dataType:'json',
-            data: {
-                Phone   : phone,
-                Password: password
-            }
+            data: data
         })
         .done((res:any) => {
             if(res.StatusCode === 200){
@@ -100,8 +106,11 @@ export class Customer {
             callback(err,status);
         })
     }
+    get googleProfile() {
+        return this._googleProfile;
+    }
     //LOGIN WITH GOOGLE
-    public loginWithGoogle(callback:any=()=>{}){
+    public loginWithGoogle(callback:any=()=>{},facebookSenderId:string = ""){
         var self = this;
         var auth2 = gapi.auth2.getAuthInstance();
         // Sign-In
@@ -109,30 +118,48 @@ export class Customer {
         .then((profile:any)=>{
             // var idToken = profile.getAuthResponse().id_token;
             // callback(null,profile.getId());
-            self.getUserWithProvider('google',profile.getId(),callback);
+            self._googleProfile = profile.getBasicProfile();
+            self.getUserWithProvider('google',profile.getId(),callback,facebookSenderId);
         },(error:any)=>{
             callback('Authentication failed.',error);
         });
     }
+
+    get facebookProfile() {
+        return this._fbProfile;
+    }
     //LOGIN WITH FACEBOOK
-    public loginWithFacebook(callback:any = ()=>{}){
+    public loginWithFacebook(callback:any = ()=>{}, facebookSenderId: string = ""){
         var self = this;
         FB.login(function(response:any) {
             if (response.authResponse) {
                 // callback(null,FB.getAccessToken());
                 // callback(null,FB.getUserID());
-                self.getUserWithProvider('facebook',FB.getUserID(),callback);
+                FB.api(
+                    '/me',
+                    'GET',
+                    {"fields":"id,name,email,birthday"},
+                    function(response:any) {
+                        self._fbProfile = response;
+                    }
+                );
+                self.getUserWithProvider('facebook',FB.getAccessToken(),callback,facebookSenderId);
             } else {
                 callback('User cancelled login or did not fully authorize.',null);
             }
+        },{
+            scope: 'email,user_birthday', 
+            return_scopes: true
         });
     }
 
-    private getUserWithProvider(provider:string,token:string,callback:any = ()=>{}){
+    private getUserWithProvider(provider:string,token:string,callback:any = ()=>{},facebookSenderId:string = ""){
         var form = new FormData();
         form.append("Method", provider);
         form.append("Token", token);
-
+        if(facebookSenderId){
+            form.append("FacebookSenderId",facebookSenderId);
+        }
         var settings = {
             "async": true,
             "crossDomain": true,
@@ -187,8 +214,11 @@ export class Customer {
         form.append("Password", data.password);
         form.append("Fullname", data.fullName);
         form.append("Email", data.email);
-        form.append("FacebookToken", "");
-        form.append("GoogleToken", "");
+        form.append("FacebookId", "");
+        form.append("GoogleId", "");
+        if(data.facebookSenderId){
+            form.append("FacebookSenderId",(data.facebookSenderId));
+        }
 
         var settings = {
             async: true,
@@ -200,6 +230,7 @@ export class Customer {
             mimeType: "multipart/form-data",
             data: form,
             success: (result:any,status:any,res:any)=>{
+                console.error(res);
                 var resJson = JSON.parse(res.responseText);
                 if(resJson.StatusCode === 200){
                     this.user = resJson.Data;
@@ -223,20 +254,23 @@ export class Customer {
         }
         $.ajax(settings);
     }
-    public signUpWithProvider(provider:string,token:string,data:any,callback:any = ()=>{}){
+    public signUpWithProvider(provider:string,uid:string,data:any,callback:any = ()=>{}){
         var form = new FormData();
         form.append("Phone", data.phone);
         form.append("Password", "");
         form.append("Fullname", data.fullName);
         form.append("Email", data.email);
+        if(data.facebookSenderId){
+            form.append("FacebookSenderId",(data.facebookSenderId));
+        }
         switch(provider){
             case 'facebook':
-                form.append("FacebookToken", token);
-                form.append("GoogleToken", "");
+                form.append("FacebookId", FB.getUserID());
+                form.append("GoogleId", "");
                 break;
             case 'google':
-                form.append("FacebookToken", "");
-                form.append("GoogleToken", token);
+                form.append("FacebookId", "");
+                form.append("GoogleId", uid);
                 break;
         }
         var settings = {
@@ -490,6 +524,8 @@ export class Customer {
         form.append("PromotionCode", bill.promotionCode);
         form.append("Address", bill.address);
         form.append("Area", bill.area);
+        // form.append("SenderId",bill.senderId || "");
+        form.append("BranchId",bill.branchId || 1);
         console.log(this._token);
         var settings = {
             "async": true,
